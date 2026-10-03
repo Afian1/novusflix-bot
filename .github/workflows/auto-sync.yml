@@ -2,9 +2,18 @@ name: Auto Sync New Movies
 
 on:
   schedule:
-    # প্রতিদিন প্রতি ৪ ঘণ্টা পরপর ব্যাকগ্রাউন্ডে স্বয়ংক্রিয়ভাবে চলবে
     - cron: '0 */4 * * *'
   workflow_dispatch:
+    inputs:
+      source:
+        description: 'কোন ওয়েবসাইট থেকে কনটেন্ট আনবেন?'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - cinefreak
+          - hdmovie2
 
 jobs:
   sync:
@@ -24,4 +33,5 @@ jobs:
       - name: Run Auto Scraper
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          SOURCE_CHOICE: ${{ github.event.inputs.source || 'both' }}
         run: node scraper.js
