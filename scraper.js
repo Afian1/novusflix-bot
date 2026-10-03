@@ -2,7 +2,6 @@ const axios = require('axios');
 const cheerio = require('cheerio');
 const admin = require('firebase-admin');
 
-// ফায়ারবেস কানেকশন সেটআপ
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
 if (!admin.apps.length) {
@@ -82,11 +81,11 @@ async function runAutoScraper() {
     const allNewPosts = [...cinefreakPosts, ...hdmovie2Posts];
 
     if (allNewPosts.length === 0) {
-      console.log("কোনো নতুন কনটেন্ট পাওয়া যায়নি।");
+      console.log("কোনো নতুন কনটেন্ট পাওয়া যায়নি।");
       process.exit(0);
     }
 
-    console.log(`মোট ${allNewPosts.length} টি নতুন কনটেন্ট পাওয়া গেছে। ডাটাবেজে যোগ করা হচ্ছে...`);
+    console.log(`মোট ${allNewPosts.length} টি নতুন কনটেন্ট পাওয়া গেছে। ডাটাবেজে যোগ করা হচ্ছে...`);
 
     for (const post of allNewPosts) {
       const newId = Date.now() + Math.floor(Math.random() * 1000);
@@ -110,7 +109,7 @@ async function runAutoScraper() {
       };
 
       await db.ref('movies/' + newId).set(movieData);
-      console.log(`যুক্ত হয়েছে: ${post.title}`);
+      console.log(`যুক্ত হয়েছে: ${post.title}`);
     }
 
     console.log("ডাটাবেজ আপডেট সম্পন্ন।");
