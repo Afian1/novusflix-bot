@@ -23,8 +23,11 @@ async function extractPlayerLink(postUrl) {
     });
     const $ = cheerio.load(res.data);
     
-    // স্ক্রিনশটের iframe#appStreamPlayer অথবা সাধারণ iframe চেক
-    let streamUrl = $('#appStreamPlayer').attr('src') \vert{}\vert{} $('iframe').attr('src');
+    // কোনো পাইপ সিম্বল ছাড়া নিরাপদ চেক
+    let streamUrl = $('#appStreamPlayer').attr('src');
+    if (!streamUrl) {
+      streamUrl = $('iframe').attr('src');
+    }
     
     if (streamUrl) {
       if (streamUrl.startsWith('//')) {
@@ -32,7 +35,7 @@ async function extractPlayerLink(postUrl) {
       }
       return streamUrl;
     }
-    return postUrl; // আইফ্রেম না পেলে পেজ লিঙ্ক
+    return postUrl;
   } catch (err) {
     return postUrl;
   }
@@ -59,15 +62,15 @@ async function syncCinefreak(existingTitles) {
       }
 
       if (title && link && !existingTitles.includes(title.toLowerCase())) {
-        console.log(`Cinefreak থেকে ভিডিও লিঙ্ক খোঁজা হচ্ছে: ${title}`);
+        console.log("Cinefreak থেকে লিঙ্ক খোঁজা হচ্ছে: " + title);
         const streamLink = await extractPlayerLink(link);
-        newItems.push({ title, link: streamLink, poster, category: "এনিমে" });
+        newItems.push({ title: title, link: streamLink, poster: poster, category: "এনিমে" });
       }
     }
 
     return newItems;
   } catch (err) {
-    console.log("Cinefreak error:", err.message);
+    console.log("Cinefreak error: " + err.message);
     return [];
   }
 }
@@ -93,37 +96,44 @@ async function syncHDMovie2(existingTitles) {
       }
 
       if (title && link && !existingTitles.includes(title.toLowerCase())) {
-        console.log(`HDMovie2 থেকে ভিডিও লিঙ্ক খোঁজা হচ্ছে: ${title}`);
+        console.log("HDMovie2 থেকে লিঙ্ক খোঁজা হচ্ছে: " + title);
         const streamLink = await extractPlayerLink(link);
-        newItems.push({ title, link: streamLink, poster, category: "অ্যাকশন" });
+        newItems.push({ title: title, link: streamLink, poster: poster, category: "অ্যাকশন" });
       }
     }
 
     return newItems;
   } catch (err) {
-    console.log("HDMovie2 error:", err.message);
+    console.log("HDMovie2 error: " + err.message);
     return [];
   }
 }
 
 async function runAutoScraper() {
   try {
-    // গিটহাব থেকে পাঠানো চয়েস (cinefreak, hdmovie2, অথবা both)
-    const selectedSource = process.env.SOURCE_CHOICE || 'both';
-    console.log(`বট চালু হয়েছে। সিলেক্টেড সোর্স: ${selectedSource}`);
+    let selectedSource = process.env.SOURCE_CHOICE;
+    if (!selectedSource) {
+      selectedSource = 'both';
+    }
+    console.log("বট চালু হয়েছে। সিলেক্টেড সোর্স: " + selectedSource);
 
     const snapshot = await db.ref('movies').once('value');
     const existingMovies = snapshot.val() || {};
-    const existingTitles = Object.values(existingMovies).map(m => (m.title || '').trim().toLowerCase());
+    const existingTitles = Object.values(existingMovies).map(m => {
+      if (m && m.title) {
+        return m.title.trim().toLowerCase();
+      }
+      return '';
+    });
 
     let allNewPosts = [];
 
-    if (selectedSource === 'cinefreak' || selectedSource === 'both') {
+    if (['cinefreak', 'both'].includes(selectedSource)) {
       const cinefreakPosts = await syncCinefreak(existingTitles);
       allNewPosts.push(...cinefreakPosts);
     }
 
-    if (selectedSource === 'hdmovie2' || selectedSource === 'both') {
+    if (['hdmovie2', 'both'].includes(selectedSource)) {
       const hdmovie2Posts = await syncHDMovie2(existingTitles);
       allNewPosts.push(...hdmovie2Posts);
     }
@@ -133,7 +143,7 @@ async function runAutoScraper() {
       process.exit(0);
     }
 
-    console.log(`মোট ${allNewPosts.length} টি নতুন কনটেন্ট পাওয়া গেছে। ডাটাবেজে যুক্ত করা হচ্ছে...`);
+    console.log("মোট " + allNewPosts.length + " টি নতুন কনটেন্ট পাওয়া গেছে। ডাটাবেজে যুক্ত করা হচ্ছে...");
 
     for (const post of allNewPosts) {
       const newId = Date.now() + Math.floor(Math.random() * 1000);
@@ -161,13 +171,13 @@ async function runAutoScraper() {
       };
 
       await db.ref('movies/' + newId).set(movieData);
-      console.log(`সফলভাবে যোগ হয়েছে: ${post.title}`);
+      console.log("সফলভাবে যোগ হয়েছে: " + post.title);
     }
 
     console.log("ডাটাবেজ আপডেট সম্পন্ন!");
     process.exit(0);
   } catch (error) {
-    console.error("Scraper Error:", error.message);
+    console.error("Scraper Error: " + error.message);
     process.exit(1);
   }
 }
