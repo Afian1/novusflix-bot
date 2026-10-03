@@ -2,6 +2,7 @@ name: Auto Sync New Movies
 
 on:
   schedule:
+    # প্রতিদিন প্রতি ৪ ঘণ্টা পরপর ব্যাকগ্রাউন্ডে স্বয়ংক্রিয়ভাবে চলবে
     - cron: '0 */4 * * *'
   workflow_dispatch:
 
@@ -10,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
       - name: Install Tools
         run: npm install axios cheerio firebase-admin
