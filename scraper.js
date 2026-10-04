@@ -14,7 +14,6 @@ if (!admin.apps.length) {
 const db = admin.database();
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-// পেজের ভেতরে ঢুকে আসল প্লেয়ারের আইফ্রেম লিঙ্ক বের করার ফাংশন
 async function extractPlayerLink(postUrl) {
   try {
     const res = await axios.get(postUrl, {
@@ -23,7 +22,6 @@ async function extractPlayerLink(postUrl) {
     });
     const $ = cheerio.load(res.data);
     
-    // কোনো পাইপ সিম্বল ছাড়া নিরাপদ চেক
     let streamUrl = $('#appStreamPlayer').attr('src');
     if (!streamUrl) {
       streamUrl = $('iframe').attr('src');
@@ -51,21 +49,33 @@ async function syncCinefreak(existingTitles) {
     const $ = cheerio.load(res.data);
     const newItems = [];
 
-    const posts = $('article, .post-item, .entry-card').slice(0, 5).toArray();
+    // পোস্ট খোঁজার জন্য ব্রড সিলেক্টর
+    const foundElements = $('article, .post, .item, a[href*="/movie/"], a[href*="/series/"]');
+    console.log("Cinefreak থেকে সম্ভাব্য মোট উপাদান পাওয়া গেছে: " + foundElements.length);
 
-    for (const el of posts) {
-      const title = $(el).find('h2, .entry-title, .title').text().trim();
-      const link = $(el).find('a').attr('href');
+    $('article, .post-item, .entry-card, .post').slice(0, 8).each((i, el) => {
+      const title = $(el).find('h1, h2, h3, .entry-title, .title').first().text().trim();
+      let link = $(el).find('a').attr('href');
       let poster = $(el).find('img').attr('src');
       if (!poster) {
         poster = $(el).find('img').attr('data-src');
       }
 
-      if (title && link && !existingTitles.includes(title.toLowerCase())) {
-        console.log("Cinefreak থেকে লিঙ্ক খোঁজা হচ্ছে: " + title);
-        const streamLink = await extractPlayerLink(link);
-        newItems.push({ title: title, link: streamLink, poster: poster, category: "এনিমে" });
+      console.log(`[Cinefreak Item ${i + 1}] Title: ${title || 'Not found'} | Link: ${link || 'Not found'}`);
+
+      if (title && link) {
+        const isDuplicate = existingTitles.includes(title.toLowerCase());
+        if (!isDuplicate) {
+          newItems.push({ title: title, link: link, poster: poster, category: "এনিমে" });
+        } else {
+          console.log(`ডুপ্লিকেট স্কিপ করা হয়েছে: ${title}`);
+        }
       }
+    });
+
+    for (let item of newItems) {
+      console.log("ভিডিও প্লেয়ার লিঙ্ক খোঁজা হচ্ছে: " + item.title);
+      item.link = await extractPlayerLink(item.link);
     }
 
     return newItems;
@@ -85,21 +95,32 @@ async function syncHDMovie2(existingTitles) {
     const $ = cheerio.load(res.data);
     const newItems = [];
 
-    const posts = $('.item, article, .post').slice(0, 5).toArray();
+    const foundElements = $('.item, article, .post, .movies-list .ml-item');
+    console.log("HDMovie2 থেকে সম্ভাব্য মোট উপাদান পাওয়া গেছে: " + foundElements.length);
 
-    for (const el of posts) {
-      const title = $(el).find('.title, h2, h3').text().trim();
-      const link = $(el).find('a').attr('href');
+    $('.item, article, .post, .ml-item').slice(0, 8).each((i, el) => {
+      const title = $(el).find('.title, h2, h3, .mli-info h2').first().text().trim();
+      let link = $(el).find('a').attr('href');
       let poster = $(el).find('img').attr('src');
       if (!poster) {
         poster = $(el).find('img').attr('data-src');
       }
 
-      if (title && link && !existingTitles.includes(title.toLowerCase())) {
-        console.log("HDMovie2 থেকে লিঙ্ক খোঁজা হচ্ছে: " + title);
-        const streamLink = await extractPlayerLink(link);
-        newItems.push({ title: title, link: streamLink, poster: poster, category: "অ্যাকশন" });
+      console.log(`[HDMovie2 Item ${i + 1}] Title: ${title || 'Not found'} | Link: ${link || 'Not found'}`);
+
+      if (title && link) {
+        const isDuplicate = existingTitles.includes(title.toLowerCase());
+        if (!isDuplicate) {
+          newItems.push({ title: title, link: link, poster: poster, category: "অ্যাকশন" });
+        } else {
+          console.log(`ডুপ্লিকেট স্কিপ করা হয়েছে: ${title}`);
+        }
       }
+    });
+
+    for (let item of newItems) {
+      console.log("ভিডিও প্লেয়ার লিঙ্ক খোঁজা হচ্ছে: " + item.title);
+      item.link = await extractPlayerLink(item.link);
     }
 
     return newItems;
@@ -111,10 +132,7 @@ async function syncHDMovie2(existingTitles) {
 
 async function runAutoScraper() {
   try {
-    let selectedSource = process.env.SOURCE_CHOICE;
-    if (!selectedSource) {
-      selectedSource = 'both';
-    }
+    let selectedSource = process.env.SOURCE_CHOICE || 'both';
     console.log("বট চালু হয়েছে। সিলেক্টেড সোর্স: " + selectedSource);
 
     const snapshot = await db.ref('movies').once('value');
@@ -125,6 +143,8 @@ async function runAutoScraper() {
       }
       return '';
     });
+
+    console.log(`ডাটাবেজে বর্তমানে মোট মুভি আছে: ${existingTitles.length} টি`);
 
     let allNewPosts = [];
 
@@ -143,14 +163,11 @@ async function runAutoScraper() {
       process.exit(0);
     }
 
-    console.log("মোট " + allNewPosts.length + " টি নতুন কনটেন্ট পাওয়া গেছে। ডাটাবেজে যুক্ত করা হচ্ছে...");
+    console.log(`মোট ${allNewPosts.length} টি নতুন কনটেন্ট যুক্ত করা হচ্ছে...`);
 
     for (const post of allNewPosts) {
       const newId = Date.now() + Math.floor(Math.random() * 1000);
-      let finalPoster = post.poster;
-      if (!finalPoster) {
-        finalPoster = "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400";
-      }
+      let finalPoster = post.poster || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400";
 
       const movieData = {
         id: newId,
@@ -171,7 +188,7 @@ async function runAutoScraper() {
       };
 
       await db.ref('movies/' + newId).set(movieData);
-      console.log("সফলভাবে যোগ হয়েছে: " + post.title);
+      console.log(`সফলভাবে ডাটাবেজে সেভ হয়েছে: ${post.title}`);
     }
 
     console.log("ডাটাবেজ আপডেট সম্পন্ন!");
