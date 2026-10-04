@@ -12,51 +12,44 @@ if (!admin.apps.length) {
 
 const db = admin.database();
 
-// আপনার পছন্দের ৫টি নির্দিষ্ট সোর্স ও সাইটের ক্যাটাগরি নাম
+// আপনার সাইটের সাইডবারের সাথে হুবহু মিল রেখে ক্যাটাগরি নাম
 const TARGET_SOURCES = [
-  { name: 'Latest Releases', url: 'https://cinefreak.net/', defaultCat: 'অ্যাকশন' },
-  { name: 'Bongo BD', url: 'https://cinefreak.net/ott/bongo-bd/', defaultCat: 'বঙ্গ' },
-  { name: 'Chorki', url: 'https://cinefreak.net/ott/chorki/', defaultCat: 'চরকি' },
-  { name: 'Hoichoi', url: 'https://cinefreak.net/ott/hoichoi/', defaultCat: 'হইচই' },
-  { name: 'Netflix', url: 'https://cinefreak.net/ott/netflix/', defaultCat: 'নেটফ্লিক্স' }
+  { name: 'Hoichoi', url: 'https://cinefreak.net/ott/hoichoi/', category: 'হইচই' },
+  { name: 'Chorki', url: 'https://cinefreak.net/ott/chorki/', category: 'চরকি' },
+  { name: 'Bongo BD', url: 'https://cinefreak.net/ott/bongo-bd/', category: 'বঙ্গ' },
+  { name: 'Netflix', url: 'https://cinefreak.net/ott/netflix/', category: 'নেটফ্লিক্স' },
+  { name: 'Latest Releases', url: 'https://cinefreak.net/', category: 'অ্যাকশন' }
 ];
 
 async function runAutoBot() {
   let browser = null;
   try {
-    console.log("ক্রোম ব্রাউজার চালু করা হচ্ছে...");
+    console.log("ব্রাউজার চালু হচ্ছে...");
     browser = await puppeteer.launch({
       headless: "new",
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu'
-      ]
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
     });
 
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36');
     await page.setViewport({ width: 1366, height: 768 });
 
-    // ১. ফায়ারবেস থেকে আগের থাকা সব মুভির নাম আনা (ডুপ্লিকেট এড়াতে)
+    // ডাটাবেজের আগের মুভি তালিকা নেওয়া
     const snapshot = await db.ref('movies').once('value');
     const existingMovies = snapshot.val() || {};
     const existingTitles = Object.values(existingMovies).map(m => (m && m.title ? m.title.trim().toLowerCase() : ''));
 
-    console.log(`ডাটাবেজে বর্তমানে মোট মুভি আছে: ${existingTitles.length} টি`);
-
     const candidateMovies = [];
     const seenLinks = new Set();
 
-    // ২. নির্দিষ্ট ৫টি প্ল্যাটফর্ম থেকে কনটেন্ট সংগ্রহ
+    // ৫টি প্ল্যাটফর্ম থেকে কনটেন্ট ও সঠিক ক্যাটাগরি নেওয়া
     for (const source of TARGET_SOURCES) {
-      console.log(`\nস্ক্যান করা হচ্ছে: ${source.name} (${source.url})...`);
+      console.log(`স্ক্যান করা হচ্ছে: ${source.name} (${source.category})...`);
       try {
         await page.goto(source.url, { waitUntil: 'domcontentloaded', timeout: 35000 });
         await new Promise(r => setTimeout(r, 2000));
 
-        const pageMovies = await page.evaluate((categoryName) => {
+        const pageMovies = await page.evaluate((exactCat) => {
           const cards = document.querySelectorAll('a[href*="-movie-download"], a[href*="-web-series"]');
           const list = [];
 
@@ -84,106 +77,96 @@ async function runAutoBot() {
                 title: title.replace(/\s+/g, ' ').trim(),
                 link: link,
                 poster: poster,
-                category: categoryName
+                category: exactCat // নির্দিষ্ট ক্যাটাগরি সেট করা
               });
             }
-            if (list.length >= 6) break;
+            if (list.length >= 4) break;
           }
           return list;
-        }, source.defaultCat);
+        }, source.category);
 
         for (const item of pageMovies) {
           if (!seenLinks.has(item.link)) {
             seenLinks.add(item.link);
-            const isDuplicate = existingTitles.includes(item.title.toLowerCase());
-            if (!isDuplicate) {
+            if (!existingTitles.includes(item.title.toLowerCase())) {
               candidateMovies.push(item);
             }
           }
         }
       } catch (err) {
-        console.log(`${source.name} স্ক্যান করতে সমস্যা: ${err.message}`);
+        console.log(`${source.name} স্ক্যান এরর: ${err.message}`);
       }
     }
 
-    // প্রথম ১০টি নতুন মুভি নির্বাচন
     const finalNewMovies = candidateMovies.slice(0, 10);
-    console.log(`\n৫টি সোর্স মিলিয়ে মোট নতুন বাছাইকৃত কনটেন্ট: ${finalNewMovies.length} টি`);
+    console.log(`মোট নতুন মুভি পাওয়া গেছে: ${finalNewMovies.length} টি`);
 
     if (finalNewMovies.length === 0) {
-      console.log("এই ৫টি প্ল্যাটফর্মে নতুন কোনো পোস্ট পাওয়া যায়নি (সবই ডাটাবেজে আগে থেকে আছে)।");
+      console.log("নতুন কোনো মুভি নেই।");
       await browser.close();
       process.exit(0);
     }
 
     const readyToUpload = [];
 
-    // ৩. প্রতিটি মুভিতে ঢুকে প্লে বাটনে ক্লিক করে আসল আইফ্রেম লিংক নেওয়া
+    // প্লে বাটনে ক্লিক করে আসল আইফ্রেম বের করা
     for (let i = 0; i < finalNewMovies.length; i++) {
       const item = finalNewMovies[i];
-      console.log(`\n[${i + 1}/${finalNewMovies.length}] পেজে ঢোকা হচ্ছে: ${item.title}`);
+      console.log(`[${i + 1}/${finalNewMovies.length}] পেজে ঢোকা হচ্ছে: ${item.title} -> [${item.category}]`);
 
       try {
         await page.goto(item.link, { waitUntil: 'domcontentloaded', timeout: 35000 });
         await page.evaluate(() => window.scrollBy(0, 350));
         await new Promise(r => setTimeout(r, 2000));
 
-        // #cfClickPlay বাটনে ক্লিক
         await page.evaluate(() => {
           const playBtn = document.querySelector('#cfClickPlay') || document.querySelector('.cf-click-play');
           if (playBtn) playBtn.click();
         });
 
-        // প্লেয়ার লোড হওয়ার জন্য অপেক্ষা
         await new Promise(r => setTimeout(r, 3500));
 
-        // #appStreamPlayer এর src সংগ্রহ
         let streamUrl = await page.evaluate(() => {
           const iframe = document.querySelector('#appStreamPlayer');
-          if (iframe && iframe.src && !iframe.src.includes('about:blank')) {
-            return iframe.src;
-          }
+          if (iframe && iframe.src && !iframe.src.includes('about:blank')) return iframe.src;
           const anyVidzer = document.querySelector('iframe[src*="vidzer.me"]');
           if (anyVidzer) return anyVidzer.src;
           return '';
         });
 
-        console.log(`-> উদ্ধারকৃত আসল ভিডিও লিঙ্ক: ${streamUrl}`);
-
         if (streamUrl && streamUrl.includes('vidzer.me')) {
           readyToUpload.push({
             title: item.title,
-            category: item.category,
+            category: item.category, // সঠিক ক্যাটাগরি
             poster: item.poster || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400",
             link: streamUrl
           });
         }
       } catch (err) {
-        console.log(`লিঙ্ক সংগ্রহ করতে সমস্যা: ${item.title} -> ${err.message}`);
+        console.log(`ত্রুটি: ${item.title} -> ${err.message}`);
       }
     }
 
     await browser.close();
 
-    // ৪. ফায়ারবেস ডাটাবেজে সিরিয়াল অনুযায়ী সেভ করা
-    console.log(`\nমোট ${readyToUpload.length} টি মুভি ফায়ারবেসে যুক্ত করা হচ্ছে...`);
+    // ফায়ারবেসে সঠিক ক্যাটাগরি দিয়ে সেভ করা
+    console.log("ডাটাবেজে যুক্ত করা হচ্ছে...");
     const baseTime = Date.now();
 
     for (let i = 0; i < readyToUpload.length; i++) {
       const post = readyToUpload[i];
-      // ১ নম্বর মুভি যেন পিন পোস্টের পরেই সবার উপরে থাকে
       const newId = baseTime + (readyToUpload.length - i) * 1000;
 
       const movieData = {
         id: newId,
         title: post.title,
-        category: post.category,
+        category: post.category, // হইচই, চরকি, বঙ্গ, নেটফ্লিক্স বা অ্যাকশন
         badge: "HD 1080p",
         rating: 4.9,
         views: "1.2k",
         likes: "600",
         poster: post.poster,
-        desc: post.title + " - সরাসরি স্ট্রিমিং ও প্লেয়ার লিংক যুক্ত করা হয়েছে।",
+        desc: post.title + " - সরাসরি স্ট্রিমিং লিঙ্ক যুক্ত করা হয়েছে।",
         isFeatured: false,
         isPinned: false,
         isSeries: false,
@@ -193,14 +176,14 @@ async function runAutoBot() {
       };
 
       await db.ref('movies/' + newId).set(movieData);
-      console.log(`[পজিশন ${i + 1}] যুক্ত হয়েছে: ${post.title} (${post.category})`);
+      console.log(`যুক্ত হয়েছে: ${post.title} -> [${post.category}]`);
     }
 
-    console.log("\nসবগুলো কনটেন্ট সফলভাবে ডাটাবেজে যুক্ত সম্পন্ন হয়েছে!");
+    console.log("সব সফলভাবে আপলোড সম্পন্ন!");
     process.exit(0);
 
   } catch (error) {
-    console.error("Scraper Error: " + error.message);
+    console.error("বট ত্রুটি: " + error.message);
     if (browser) await browser.close();
     process.exit(1);
   }
