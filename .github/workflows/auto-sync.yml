@@ -1,26 +1,28 @@
-name: Auto Sync New Movies
+name: Auto Sync Multi-Source Movies
 
 on:
   schedule:
-    - cron: '0 */12 * * *'
-  workflow_dispatch:
+    # প্রতি ১২ ঘণ্টা পর পর নিজে থেকে চলবে
+    - cron: '0 */4 * * *'
+  workflow_dispatch: # ম্যানুয়ালি রান করার বাটন
 
 jobs:
-  sync:
+  scrape-and-sync:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - name: কোড চেকআউট করা
+        uses: actions/checkout@v3
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Node.js সেটআপ
+        uses: actions/setup-node@v3
         with:
-          node-version: 20
+          node-version: '18'
 
-      - name: Install Tools
-        run: npm install puppeteer firebase-admin
+      - name: ডিপেন্ডেন্সি ইনস্টল
+        run: npm install
 
-      - name: Run Auto Scraper
+      - name: স্ক্র্যাপার বট রান করা
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node scraper.js
