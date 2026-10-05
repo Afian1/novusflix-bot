@@ -2,9 +2,9 @@ name: Auto Sync Multi-Source Movies
 
 on:
   schedule:
-    # প্রতি ১২ ঘণ্টা পর পর নিজে থেকে চলবে
-    - cron: '0 */4 * * *'
-  workflow_dispatch: # ম্যানুয়ালি রান করার বাটন
+    # প্রতি ৬ ঘণ্টা পর পর ঘড়ি ধরে অটোমেটিক চলবে
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # যখনই মন চাইবে ম্যানুয়ালি রান করার বাটন
 
 jobs:
   scrape-and-sync:
