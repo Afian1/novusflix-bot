@@ -1,0 +1,13 @@
+{
+  "name": "novusflix-multi-scraper",
+  "version": "1.0.0",
+  "description": "Automated Multi-Source Scraper for NovusFlix",
+  "main": "scraper.js",
+  "scripts": {
+    "start": "node scraper.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.11.1",
+    "puppeteer": "^22.6.0"
+  }
+}
