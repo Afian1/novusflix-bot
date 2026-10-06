@@ -67,7 +67,7 @@ async function runAutoBot() {
 
     await page.setViewport({ width: 1920, height: 1080 });
 
-    // ফায়ারবেস থেকে আগের টাইটেল চেক
+    // ফায়ারবেসের বিদ্যমান কনটেন্ট নেওয়া
     const snapshot = await db.ref('movies').once('value');
     const existingMovies = snapshot.val() || {};
     const existingTitles = Object.values(existingMovies).map(m => (m && m.title ? m.title.trim().toLowerCase() : ''));
@@ -250,3 +250,125 @@ async function runAutoBot() {
         } catch (err) {
           console.log(`CineFreak স্কিপ: ${item.title}`);
         }
+      }
+    }
+
+    // ==========================================
+    // ধাপ ৩.২: VidBox nxsha.space প্লেয়ার আইফ্রেম
+    // ==========================================
+    if (vidboxCandidates.length > 0) {
+      console.log(`\nVidBox প্লেয়ার লিঙ্ক সংগ্রহ করা হচ্ছে (মোট ${vidboxCandidates.length} টি)...`);
+      for (let i = 0; i < vidboxCandidates.length; i++) {
+        const item = vidboxCandidates[i];
+        try {
+          await page.goto(item.link, { waitUntil: 'domcontentloaded', timeout: 35000 });
+          await new Promise(r => setTimeout(r, 2000));
+
+          let streamUrl = await page.evaluate(() => {
+            const nx = document.querySelector('iframe[src*="nxsha.space"]');
+            if (nx && nx.src) return nx.src;
+
+            const allIframes = document.querySelectorAll('iframe');
+            for (let f of allIframes) {
+              const src = f.src || '';
+              if (src && !src.includes('youtube.com') && !src.includes('youtu.be') && !src.includes('about:blank')) {
+                return src;
+              }
+            }
+            return '';
+          });
+
+          if (!streamUrl || streamUrl.includes('youtube.com')) {
+            if (item.link.includes('/movie/')) {
+              const mId = item.link.split('/movie/')[1].split('/')[0].split('?')[0];
+              streamUrl = `https://nxsha.space/embed/movie/${mId}`;
+            } else if (item.link.includes('/tv/')) {
+              const tvId = item.link.split('/tv/')[1].split('/')[0].split('?')[0];
+              streamUrl = `https://nxsha.space/embed/tv/${tvId}/1/1`;
+            }
+          }
+
+          if (streamUrl) {
+            readyVidbox.push({
+              title: item.title,
+              category: item.category,
+              poster: item.poster || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400",
+              link: streamUrl
+            });
+            console.log(`[VidBox OK] -> ${item.title} (Stream: ${streamUrl})`);
+          }
+        } catch (err) {
+          console.log(`VidBox স্কিপ: ${item.title}`);
+        }
+      }
+    }
+
+    await browser.close();
+
+    // ==========================================
+    // ধাপ ৪: ডাটাবেজে সঠিক সিরিয়ালে আপলোড
+    // ==========================================
+    console.log("\n--- ডাটাবেজে আপলোড করা হচ্ছে ---");
+    const currentTime = Date.now();
+
+    // ১. CineFreak -> শীর্ষে বসবে (বড় আইডি)
+    for (let i = 0; i < readyCinefreak.length; i++) {
+      const post = readyCinefreak[i];
+      const newId = currentTime + (readyCinefreak.length - i) * 10000;
+
+      await db.ref('movies/' + newId).set({
+        id: newId,
+        title: post.title,
+        category: post.category,
+        badge: "HD 1080p",
+        rating: 4.9,
+        views: "1.2k",
+        likes: "600",
+        poster: post.poster,
+        desc: post.title + " - সরাসরি স্ট্রিমিং লিঙ্ক যুক্ত করা হয়েছে।",
+        isFeatured: false,
+        isPinned: false,
+        isSeries: false,
+        server1: post.link,
+        server2: post.link,
+        seasons: []
+      });
+      console.log(`[TOP] CineFreak: ${post.title}`);
+    }
+
+    // ২. VidBox -> শেষে বসবে (ছোট আইডি)
+    for (let i = 0; i < readyVidbox.length; i++) {
+      const post = readyVidbox[i];
+      const newId = currentTime - (1000000 + i * 1000);
+
+      await db.ref('movies/' + newId).set({
+        id: newId,
+        title: post.title,
+        category: post.category,
+        badge: "WEB-DL",
+        rating: 4.8,
+        views: "800",
+        likes: "450",
+        poster: post.poster,
+        desc: post.title + " - VidBox স্ট্রিমিং কালেকশন।",
+        isFeatured: false,
+        isPinned: false,
+        isSeries: false,
+        server1: post.link,
+        server2: post.link,
+        seasons: []
+      });
+      console.log(`[BOTTOM] VidBox: ${post.title}`);
+    }
+
+    console.log("\nসবকিছু সফলভাবে সম্পন্ন হয়েছে!");
+    process.exit(0);
+
+  } catch (error) {
+    console.error("বট ত্রুটি: " + error.message);
+    if (browser) await browser.close();
+    process.exit(1);
+  }
+}
+
+runAutoBot();
