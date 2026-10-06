@@ -13,7 +13,7 @@ if (!admin.apps.length) {
 
 const db = admin.database();
 
-// ১. সিনেফ্রিক সোর্সসমূহ (হোমপেজের শীর্ষে থাকবে)
+// ১. সিনেফ্রিক সোর্সসমূহ
 const CINEFREAK_SOURCES = [
   { name: 'CineFreak Latest', url: 'https://cinefreak.net/', category: 'অ্যাকশন', limit: 10 },
   { name: 'CineFreak Netflix', url: 'https://cinefreak.net/ott/netflix/', category: 'নেটফ্লিক্স', limit: 10 },
@@ -22,12 +22,12 @@ const CINEFREAK_SOURCES = [
   { name: 'CineFreak Hoichoi', url: 'https://cinefreak.net/ott/hoichoi/', category: 'হইচই', limit: 10 }
 ];
 
-// ২. বিটবক্স প্রোভাইডার সোর্সসমূহ (নেটফ্লিক্স ক্যাটাগরিতে যাবে এবং হোমপেজের শেষে থাকবে)
+// ২. বিটবক্স প্রোভাইডার সোর্সসমূহ (সঠিক পাথ ও ফিল্টার ইউআরএল)
 const VIDBOX_PROVIDERS = [
-  { name: 'VidBox Netflix', url: 'https://vidbox.vc/provider/netflix', category: 'নেটফ্লিক্স', limit: 50 },
-  { name: 'VidBox Hulu', url: 'https://vidbox.vc/provider/hulu', category: 'নেটফ্লিক্স', limit: 50 },
-  { name: 'VidBox Prime Video', url: 'https://vidbox.vc/provider/amazon-prime-video', category: 'নেটফ্লিক্স', limit: 50 },
-  { name: 'VidBox Disney Plus', url: 'https://vidbox.vc/provider/disney-plus', category: 'নেটফ্লিক্স', limit: 50 }
+  { name: 'VidBox Netflix', url: 'https://vidbox.vc/search?page=1&watch_provider=8', category: 'নেটফ্লিক্স', limit: 50 },
+  { name: 'VidBox Amazon Prime', url: 'https://vidbox.vc/search?page=1&watch_provider=9', category: 'নেটফ্লিক্স', limit: 50 },
+  { name: 'VidBox Hulu', url: 'https://vidbox.vc/search?page=1&watch_provider=15', category: 'নেটফ্লিক্স', limit: 50 },
+  { name: 'VidBox Disney Plus', url: 'https://vidbox.vc/search?page=1&watch_provider=337', category: 'নেটফ্লিক্স', limit: 50 }
 ];
 
 async function runAutoBot() {
@@ -40,15 +40,16 @@ async function runAutoBot() {
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-gpu'
+        '--disable-gpu',
+        '--window-size=1920,1080'
       ]
     });
 
     const page = await browser.newPage();
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36');
-    await page.setViewport({ width: 1366, height: 768 });
+    await page.setViewport({ width: 1920, height: 1080 });
 
-    // ফায়ারবেসের বিদ্যমান কনটেন্ট নেওয়া (ডুপ্লিকেট এড়ানোর জন্য)
+    // ফায়ারবেস থেকে আগের ডেটা আনা
     const snapshot = await db.ref('movies').once('value');
     const existingMovies = snapshot.val() || {};
     const existingTitles = Object.values(existingMovies).map(m => (m && m.title ? m.title.trim().toLowerCase() : ''));
@@ -57,12 +58,10 @@ async function runAutoBot() {
     const cinefreakCandidates = [];
     const vidboxCandidates = [];
 
-    // ========================================================
-    // ধাপ ১: সিনেফ্রিক পর্যবেক্ষণ (CineFreak Scanner)
-    // ========================================================
-    console.log("\n==========================================");
-    console.log("--- [ধাপ ১] CineFreak পর্যবেক্ষণ শুরু হচ্ছে ---");
-    console.log("==========================================");
+    // ==========================================
+    // ধাপ ১: সিনেফ্রিক স্ক্যানার
+    // ==========================================
+    console.log("\n--- [ধাপ ১] CineFreak পর্যবেক্ষণ শুরু হচ্ছে ---");
     for (const source of CINEFREAK_SOURCES) {
       console.log(`স্ক্যান হচ্ছে: ${source.name} (${source.url})...`);
       try {
@@ -119,28 +118,28 @@ async function runAutoBot() {
         }
         console.log(`-> CineFreak থেকে নতুন পাওয়া গেছে: ${added} টি`);
       } catch (err) {
-        console.log(`CineFreak এরর (${source.name}): ${err.message}`);
+        console.log(`CineFreak ত্রুটি (${source.name}): ${err.message}`);
       }
     }
 
-    // ========================================================
-    // ধাপ ২: বিটবক্স পর্যবেক্ষণ (VidBox Scanner + Smart Image Handler)
-    // ========================================================
-    console.log("\n==========================================");
-    console.log("--- [ধাপ ২] VidBox প্রোভাইডার্স পর্যবেক্ষণ শুরু হচ্ছে ---");
-    console.log("==========================================");
+    // ==========================================
+    // ধাপ ২: বিটবক্স স্ক্যানার
+    // ==========================================
+    console.log("\n--- [ধাপ ২] VidBox প্রোভাইডার্স পর্যবেক্ষণ শুরু হচ্ছে ---");
     for (const source of VIDBOX_PROVIDERS) {
       console.log(`স্ক্যান হচ্ছে: ${source.name} (${source.url})...`);
       try {
-        await page.goto(source.url, { waitUntil: 'domcontentloaded', timeout: 40000 });
-        await new Promise(r => setTimeout(r, 2500));
-
-        // ৫০টি কনটেন্ট লোড নিশ্চিত করতে স্ক্রোল
-        await page.evaluate(() => window.scrollBy(0, 1500));
+        await page.goto(source.url, { waitUntil: 'networkidle2', timeout: 45000 });
+        
+        // কার্ড আসা পর্যন্ত ৫ সেকেন্ড স্ক্রোল ও লোডিং ওয়েট
+        await page.evaluate(() => window.scrollBy(0, 1000));
+        await new Promise(r => setTimeout(r, 4000));
+        await page.evaluate(() => window.scrollBy(0, 2000));
         await new Promise(r => setTimeout(r, 2000));
 
         const items = await page.evaluate((exactCat, maxLimit) => {
-          const cards = document.querySelectorAll('a[href*="/watch/"], a[href*="/movie/"], a[href*="/tv/"]');
+          // VidBox এর সব ধরনের কার্ড সিলেক্টর
+          const cards = document.querySelectorAll('a[href*="/watch/"], a[href*="/movie/"], a[href*="/tv/"], div.group a');
           const list = [];
           const localSeen = new Set();
 
@@ -149,21 +148,19 @@ async function runAutoBot() {
             if (!link || localSeen.has(link)) continue;
 
             let title = '';
-            const tEl = card.querySelector('.title, h3, h2, span.name');
-            if (tEl) title = tEl.innerText.trim();
+            const tEl = card.querySelector('h3, h2, span, p, .title');
+            if (tEl && tEl.innerText.trim()) title = tEl.innerText.trim();
             if (!title) title = card.getAttribute('title') || '';
             if (!title) {
               const img = card.querySelector('img');
               if (img) title = img.getAttribute('alt') || '';
             }
 
-            // 🎯 নিখুঁত ইমেজ হ্যান্ডলার (wsrv.nl / TMDB সাপোর্ট)
+            // পোস্টার ইমেজ বের করা (wsrv.nl / tmdb সাপোর্ট)
             let poster = '';
             const img = card.querySelector('img');
             if (img) {
               let rawSrc = img.src || img.getAttribute('data-src') || img.getAttribute('srcset') || '';
-              
-              // wsrv.nl লিঙ্ক থাকলে সরাসরি TMDB হাই-কোয়ালিটি বের করা
               if (rawSrc.includes('wsrv.nl') && rawSrc.includes('url=')) {
                 try {
                   const urlParam = rawSrc.split('url=')[1].split('&')[0];
@@ -176,7 +173,7 @@ async function runAutoBot() {
               }
             }
 
-            if (title && link) {
+            if (title && link && (link.includes('/watch/') || link.includes('/movie/') || link.includes('/tv/'))) {
               localSeen.add(link);
               list.push({
                 title: title.replace(/\s+/g, ' ').trim(),
@@ -202,129 +199,103 @@ async function runAutoBot() {
         }
         console.log(`-> VidBox থেকে নতুন পাওয়া গেছে: ${added} টি`);
       } catch (err) {
-        console.log(`VidBox এরর (${source.name}): ${err.message}`);
+        console.log(`VidBox ত্রুটি (${source.name}): ${err.message}`);
       }
     }
 
     const readyCinefreak = [];
     const readyVidbox = [];
 
-    // ========================================================
-    // ধাপ ৩.১: CineFreak আইফ্রেম এক্সট্রাকশন (#appStreamPlayer / vidzer.me)
-    // ========================================================
-    console.log(`\nCineFreak মুভি পেজে ঢুকে প্লেয়ার লিঙ্ক সংগ্রহ করা হচ্ছে (মোট ${cinefreakCandidates.length} টি)...`);
-    for (let i = 0; i < cinefreakCandidates.length; i++) {
-      const item = cinefreakCandidates[i];
-      try {
-        await page.goto(item.link, { waitUntil: 'domcontentloaded', timeout: 35000 });
-        await page.evaluate(() => window.scrollBy(0, 350));
-        await new Promise(r => setTimeout(r, 2000));
+    // ==========================================
+    // ধাপ ৩.১: CineFreak লিংক সংগ্রহ
+    // ==========================================
+    if (cinefreakCandidates.length > 0) {
+      console.log(`\nCineFreak প্লেয়ার লিঙ্ক সংগ্রহ করা হচ্ছে (মোট ${cinefreakCandidates.length} টি)...`);
+      for (let i = 0; i < cinefreakCandidates.length; i++) {
+        const item = cinefreakCandidates[i];
+        try {
+          await page.goto(item.link, { waitUntil: 'domcontentloaded', timeout: 35000 });
+          await new Promise(r => setTimeout(r, 2000));
 
-        // প্লে বাটনে ক্লিক
-        await page.evaluate(() => {
-          const playBtn = document.querySelector('#cfClickPlay') || document.querySelector('.cf-click-play');
-          if (playBtn) playBtn.click();
-        });
-        await new Promise(r => setTimeout(r, 3500));
+          await page.evaluate(() => {
+            const playBtn = document.querySelector('#cfClickPlay') || document.querySelector('.cf-click-play');
+            if (playBtn) playBtn.click();
+          });
+          await new Promise(r => setTimeout(r, 3500));
 
-        let streamUrl = await page.evaluate(() => {
-          const iframe = document.querySelector('#appStreamPlayer');
-          if (iframe && iframe.src && !iframe.src.includes('about:blank')) return iframe.src;
-          const anyVidzer = document.querySelector('iframe[src*="vidzer.me"]');
-          if (anyVidzer) return anyVidzer.src;
-          return '';
-        });
+          let streamUrl = await page.evaluate(() => {
+            const iframe = document.querySelector('#appStreamPlayer');
+            if (iframe && iframe.src && !iframe.src.includes('about:blank')) return iframe.src;
+            const anyVidzer = document.querySelector('iframe[src*="vidzer.me"]');
+            if (anyVidzer) return anyVidzer.src;
+            return '';
+          });
 
-        if (streamUrl && streamUrl.includes('vidzer.me')) {
-          readyCinefreak.push({
+          if (streamUrl && streamUrl.includes('vidzer.me')) {
+            readyCinefreak.push({
+              title: item.title,
+              category: item.category,
+              poster: item.poster || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400",
+              link: streamUrl
+            });
+            console.log(`[CineFreak OK] -> ${item.title}`);
+          }
+        } catch (err) {
+          console.log(`CineFreak স্কিপ: ${item.title}`);
+        }
+      }
+    }
+
+    // ==========================================
+    // ধাপ ৩.২: VidBox লিংক সংগ্রহ
+    // ==========================================
+    if (vidboxCandidates.length > 0) {
+      console.log(`\nVidBox প্লেয়ার লিঙ্ক সংগ্রহ করা হচ্ছে (মোট ${vidboxCandidates.length} টি)...`);
+      for (let i = 0; i < vidboxCandidates.length; i++) {
+        const item = vidboxCandidates[i];
+        try {
+          await page.goto(item.link, { waitUntil: 'networkidle2', timeout: 35000 });
+          await new Promise(r => setTimeout(r, 3000));
+
+          let streamUrl = await page.evaluate(() => {
+            const nx = document.querySelector('iframe[src*="nxsha.space"]');
+            if (nx && nx.src) return nx.src;
+            const emb = document.querySelector('iframe[src*="/embed/"]');
+            if (emb && emb.src) return emb.src;
+            const anyIframe = document.querySelector('iframe');
+            if (anyIframe && anyIframe.src && !anyIframe.src.includes('about:blank')) return anyIframe.src;
+            return '';
+          });
+
+          if (!streamUrl) streamUrl = item.link;
+
+          readyVidbox.push({
             title: item.title,
             category: item.category,
             poster: item.poster || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400",
             link: streamUrl
           });
-          console.log(`[CineFreak OK] -> ${item.title}`);
+          console.log(`[VidBox OK] -> ${item.title}`);
+        } catch (err) {
+          console.log(`VidBox স্কিপ: ${item.title}`);
         }
-      } catch (err) {
-        console.log(`CineFreak স্কিপ: ${item.title} -> ${err.message}`);
-      }
-    }
-
-    // ========================================================
-    // ধাপ ৩.২: VidBox আইফ্রেম ও পোস্টার এক্সট্রাকশন (nxsha.space)
-    // ========================================================
-    console.log(`\nVidBox মুভি পেজে ঢুকে nxsha.space প্লেয়ার ও পোস্টার সংগ্রহ করা হচ্ছে (মোট ${vidboxCandidates.length} টি)...`);
-    for (let i = 0; i < vidboxCandidates.length; i++) {
-      const item = vidboxCandidates[i];
-      try {
-        await page.goto(item.link, { waitUntil: 'domcontentloaded', timeout: 35000 });
-        await new Promise(r => setTimeout(r, 3000));
-
-        // পেজের ভেতর থেকেও যদি আরও ভালো পোস্টার থাকে তা সংগ্রহ করা
-        let pageDetails = await page.evaluate(() => {
-          let stream = '';
-          const nxIframe = document.querySelector('iframe[src*="nxsha.space"]');
-          if (nxIframe && nxIframe.src) {
-            stream = nxIframe.src;
-          } else {
-            const embedIframe = document.querySelector('iframe[src*="/embed/"]');
-            if (embedIframe && embedIframe.src) {
-              stream = embedIframe.src;
-            } else {
-              const anyIframe = document.querySelector('iframe');
-              if (anyIframe && anyIframe.src && !anyIframe.src.includes('about:blank')) stream = anyIframe.src;
-            }
-          }
-
-          // পোস্টার ইমেজ ব্যাকআপ
-          let detailPoster = '';
-          const posterImg = document.querySelector('img[src*="image.tmdb.org"], img[src*="wsrv.nl"]');
-          if (posterImg) {
-            let src = posterImg.src || '';
-            if (src.includes('wsrv.nl') && src.includes('url=')) {
-              try {
-                detailPoster = decodeURIComponent(src.split('url=')[1].split('&')[0]).replace('/w342/', '/w500/');
-              } catch (e) {
-                detailPoster = src;
-              }
-            } else {
-              detailPoster = src;
-            }
-          }
-
-          return { stream, detailPoster };
-        });
-
-        const finalStream = pageDetails.stream || item.link;
-        const finalPoster = pageDetails.detailPoster || item.poster || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400";
-
-        readyVidbox.push({
-          title: item.title,
-          category: item.category, // 'নেটফ্লিক্স'
-          poster: finalPoster,
-          link: finalStream
-        });
-        console.log(`[VidBox OK] -> ${item.title}`);
-        console.log(`   Poster: ${finalPoster}`);
-        console.log(`   Player: ${finalStream}`);
-      } catch (err) {
-        console.log(`VidBox স্কিপ: ${item.title} -> ${err.message}`);
       }
     }
 
     await browser.close();
 
-    // ========================================================
-    // ধাপ ৪: সিরিয়াল অনুযায়ী ফায়ারবেস ডাটাবেজে সংরক্ষণ
-    // ========================================================
-    console.log("\n--- ডাটাবেজে সিরিয়াল অনুযায়ী পুশ করা হচ্ছে ---");
+    // ==========================================
+    // ধাপ ৪: ডাটাবেজে সিরিয়াল অনুযায়ী পুশ করা
+    // ==========================================
+    console.log("\n--- ডাটাবেজে আপলোড করা হচ্ছে ---");
     const currentTime = Date.now();
 
-    // ১. CineFreak কনটেন্ট: বড় আইডি পাবে (হোমপেজের সবার শীর্ষে থাকবে)
+    // ১. CineFreak -> শীর্ষে থাকবে
     for (let i = 0; i < readyCinefreak.length; i++) {
       const post = readyCinefreak[i];
       const newId = currentTime + (readyCinefreak.length - i) * 10000;
 
-      const movieData = {
+      await db.ref('movies/' + newId).set({
         id: newId,
         title: post.title,
         category: post.category,
@@ -340,21 +311,19 @@ async function runAutoBot() {
         server1: post.link,
         server2: post.link,
         seasons: []
-      };
-
-      await db.ref('movies/' + newId).set(movieData);
-      console.log(`[TOP - হোমপেজের শুরুতে] CineFreak: ${post.title} -> [${post.category}]`);
+      });
+      console.log(`[TOP] CineFreak: ${post.title}`);
     }
 
-    // ২. VidBox কনটেন্ট: ছোট আইডি পাবে (হোমপেজের সব ভিডিওর একদম শেষে থাকবে)
+    // ২. VidBox -> শেষে থাকবে
     for (let i = 0; i < readyVidbox.length; i++) {
       const post = readyVidbox[i];
       const newId = currentTime - (1000000 + i * 1000);
 
-      const movieData = {
+      await db.ref('movies/' + newId).set({
         id: newId,
         title: post.title,
-        category: post.category, // 'নেটফ্লিক্স'
+        category: post.category,
         badge: "WEB-DL",
         rating: 4.8,
         views: "800",
@@ -367,13 +336,11 @@ async function runAutoBot() {
         server1: post.link,
         server2: post.link,
         seasons: []
-      };
-
-      await db.ref('movies/' + newId).set(movieData);
-      console.log(`[BOTTOM - সবার নিচে] VidBox: ${post.title} -> [নেটফ্লিক্স]`);
+      });
+      console.log(`[BOTTOM] VidBox: ${post.title}`);
     }
 
-    console.log("\nসম্পূর্ণ অটো-স্ক্র্যাপিং ও ডাটাবেজ আপডেট সফলভাবে শেষ হয়েছে!");
+    console.log("\nসবকিছু সফলভাবে সম্পন্ন হয়েছে!");
     process.exit(0);
 
   } catch (error) {
