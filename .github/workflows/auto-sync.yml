@@ -2,9 +2,9 @@ name: Auto Sync Multi-Source Movies
 
 on:
   schedule:
-    # প্রতি ৬ ঘণ্টা পর পর ঘড়ি ধরে অটোমেটিক চলবে
+    # প্রতি ৬ ঘণ্টা পর পর ঘড়ি ধরে অটোমেটিক রান হবে
     - cron: '0 */6 * * *'
-  workflow_dispatch: # যখনই মন চাইবে ম্যানুয়ালি রান করার বাটন
+  workflow_dispatch: # ম্যানুয়ালি যেকোনো সময় 'Run workflow' চাপ দেওয়ার বাটন
 
 jobs:
   scrape-and-sync:
@@ -14,15 +14,15 @@ jobs:
       - name: কোড চেকআউট করা
         uses: actions/checkout@v3
 
-      - name: Node.js সেটআপ
+      - name: Node.js 18 সেটআপ করা
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
-      - name: ডিপেন্ডেন্সি ইনস্টল
+      - name: ডিপেন্ডেন্সি ইনস্টল করা
         run: npm install
 
-      - name: স্ক্র্যাপার বট রান করা
+      - name: স্ক্র্যাপার বট চালু করা
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
         run: node scraper.js
