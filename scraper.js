@@ -13,7 +13,7 @@ if (!admin.apps.length) {
 
 const db = admin.database();
 
-// ১. সিনেফ্রিক সোর্সসমূহ (শীর্ষে থাকবে)
+// ১. সিনেফ্রিক সোর্সসমূহ (হোমপেজের শীর্ষে থাকবে)
 const CINEFREAK_SOURCES = [
   { name: 'CineFreak Latest', url: 'https://cinefreak.net/', category: 'অ্যাকশন', limit: 10 },
   { name: 'CineFreak Netflix', url: 'https://cinefreak.net/ott/netflix/', category: 'নেটফ্লিক্স', limit: 10 },
@@ -50,7 +50,7 @@ async function runAutoBot() {
 
     const page = await browser.newPage();
 
-    // 🎯 স্টিলথ মোড: ক্লাউডফ্লেয়ার ও বট ডিটেকশন বাইপাস
+    // স্টিলথ মোড ও হেডার্স
     await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36');
     await page.setExtraHTTPHeaders({
       'Accept-Language': 'en-US,en;q=0.9',
@@ -67,7 +67,7 @@ async function runAutoBot() {
 
     await page.setViewport({ width: 1920, height: 1080 });
 
-    // ফায়ারবেসের বিদ্যমান কনটেন্ট নেওয়া
+    // ফায়ারবেস থেকে আগের টাইটেল চেক
     const snapshot = await db.ref('movies').once('value');
     const existingMovies = snapshot.val() || {};
     const existingTitles = Object.values(existingMovies).map(m => (m && m.title ? m.title.trim().toLowerCase() : ''));
@@ -77,7 +77,7 @@ async function runAutoBot() {
     const vidboxCandidates = [];
 
     // ==========================================
-    // ধাপ ১: সিনেফ্রিক পর্যবেক্ষণ (CineFreak)
+    // ধাপ ১: CineFreak পর্যবেক্ষণ
     // ==========================================
     console.log("\n--- [ধাপ ১] CineFreak পর্যবেক্ষণ শুরু হচ্ছে ---");
     for (const source of CINEFREAK_SOURCES) {
@@ -141,19 +141,16 @@ async function runAutoBot() {
     }
 
     // ==========================================
-    // ধাপ ২: বিটবক্স পর্যবেক্ষণ (VidBox)
+    // ধাপ ২: VidBox পর্যবেক্ষণ
     // ==========================================
     console.log("\n--- [ধাপ ২] VidBox প্রোভাইডার্স পর্যবেক্ষণ শুরু হচ্ছে ---");
     for (const source of VIDBOX_PROVIDERS) {
       console.log(`স্ক্যান হচ্ছে: ${source.name}...`);
       try {
         await page.goto(source.url, { waitUntil: 'networkidle2', timeout: 50000 });
-
-        // পেজ লোড ও স্ক্রোল যাতে কার্ড গ্রিড রেন্ডার হয়
         await page.evaluate(() => window.scrollBy(0, 800));
-        await new Promise(r => setTimeout(r, 4000));
+        await new Promise(r => setTimeout(r, 3000));
 
-        // আপনার দেওয়া মূল কার্ড সিলেক্টর: a[href^="/movie/"], a[href^="/tv/"]
         const items = await page.evaluate((exactCat, maxLimit) => {
           const cards = document.querySelectorAll('a[href^="/movie/"], a[href^="/tv/"], a[href*="/movie/"], a[href*="/tv/"]');
           const list = [];
@@ -217,7 +214,7 @@ async function runAutoBot() {
     const readyVidbox = [];
 
     // ==========================================
-    // ধাপ ৩.১: CineFreak প্লেয়ার আইফ্রেম এক্সট্রাকশন
+    // ধাপ ৩.১: CineFreak প্লেয়ার আইফ্রেম
     // ==========================================
     if (cinefreakCandidates.length > 0) {
       console.log(`\nCineFreak প্লেয়ার লিঙ্ক সংগ্রহ করা হচ্ছে (মোট ${cinefreakCandidates.length} টি)...`);
@@ -253,117 +250,3 @@ async function runAutoBot() {
         } catch (err) {
           console.log(`CineFreak স্কিপ: ${item.title}`);
         }
-      }
-    }
-
-    // ==========================================
-    // ধাপ ৩.২: VidBox প্লেয়ার আইফ্রেম (nxsha.space)
-    // ==========================================
-    if (vidboxCandidates.length > 0) {
-      console.log(`\nVidBox প্লেয়ার লিঙ্ক সংগ্রহ করা হচ্ছে (মোট ${vidboxCandidates.length} টি)...`);
-      for (let i = 0; i < vidboxCandidates.length; i++) {
-        const item = vidboxCandidates[i];
-        try {
-          await page.goto(item.link, { waitUntil: 'networkidle2', timeout: 40000 });
-          await new Promise(r => setTimeout(r, 3000));
-
-          let streamUrl = await page.evaluate(() => {
-            const nx = document.querySelector('iframe[src*="nxsha.space"]');
-            if (nx && nx.src) return nx.src;
-            const emb = document.querySelector('iframe[src*="/embed/"]');
-            if (emb && emb.src) return emb.src;
-            const anyIframe = document.querySelector('iframe');
-            if (anyIframe && anyIframe.src && !anyIframe.src.includes('about:blank')) return anyIframe.src;
-            return '';
-          });
-
-          // যদি সরাসরি আইফ্রেম না পায় তবে মুভি আইডি থেকে nxsha এম্বেড ইউআরএল তৈরি
-          if (!streamUrl && item.link.includes('/movie/')) {
-            const mId = item.link.split('/movie/')[1].split('/')[0].split('?')[0];
-            streamUrl = `https://nxsha.space/embed/movie/${mId}`;
-          }
-
-          if (streamUrl) {
-            readyVidbox.push({
-              title: item.title,
-              category: item.category,
-              poster: item.poster || "https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400",
-              link: streamUrl
-            });
-            console.log(`[VidBox OK] -> ${item.title} (Stream: ${streamUrl})`);
-          }
-        } catch (err) {
-          console.log(`VidBox স্কিপ: ${item.title}`);
-        }
-      }
-    }
-
-    await browser.close();
-
-    // ==========================================
-    // ধাপ ৪: ডাটাবেজে সঠিক সিরিয়ালে আপলোড
-    // ==========================================
-    console.log("\n--- ডাটাবেজে আপলোড করা হচ্ছে ---");
-    const currentTime = Date.now();
-
-    // ১. CineFreak -> শীর্ষে বসবে (বড় আইডি)
-    for (let i = 0; i < readyCinefreak.length; i++) {
-      const post = readyCinefreak[i];
-      const newId = currentTime + (readyCinefreak.length - i) * 10000;
-
-      await db.ref('movies/' + newId).set({
-        id: newId,
-        title: post.title,
-        category: post.category,
-        badge: "HD 1080p",
-        rating: 4.9,
-        views: "1.2k",
-        likes: "600",
-        poster: post.poster,
-        desc: post.title + " - সরাসরি স্ট্রিমিং লিঙ্ক যুক্ত করা হয়েছে।",
-        isFeatured: false,
-        isPinned: false,
-        isSeries: false,
-        server1: post.link,
-        server2: post.link,
-        seasons: []
-      });
-      console.log(`[TOP] CineFreak: ${post.title}`);
-    }
-
-    // ২. VidBox -> শেষে বসবে (ছোট আইডি)
-    for (let i = 0; i < readyVidbox.length; i++) {
-      const post = readyVidbox[i];
-      const newId = currentTime - (1000000 + i * 1000);
-
-      await db.ref('movies/' + newId).set({
-        id: newId,
-        title: post.title,
-        category: post.category,
-        badge: "WEB-DL",
-        rating: 4.8,
-        views: "800",
-        likes: "450",
-        poster: post.poster,
-        desc: post.title + " - VidBox স্ট্রিমিং কালেকশন।",
-        isFeatured: false,
-        isPinned: false,
-        isSeries: false,
-        server1: post.link,
-        server2: post.link,
-        seasons: []
-      });
-      console.log(`[BOTTOM] VidBox: ${post.title}`);
-    }
-
-    console.log("\nসবকিছু সফলভাবে সম্পন্ন হয়েছে!");
-    process.exit(0);
-
-  } catch (error) {
-    console.error("বট ত্রুটি: " + error.message);
-    if (browser) await browser.close();
-    process.exit(1);
-  }
-}
-
-runAutoBot();
